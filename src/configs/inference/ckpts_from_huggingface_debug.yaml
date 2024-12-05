@@ -1,0 +1,51 @@
+# Compared to the non-debug version, this file simply runs inference for fewer steps.
+experiment_dir: results/spherical-dyffusion
+n_forward_steps: 100
+forward_steps_in_memory: 50
+validation_loader:
+  # IMPORTANT: Set the correct data path for the validation dataset
+  dataset:
+    # =============== Edit this path ===============
+    data_path: "/data/climate-model/fv3gfs/2023-09-07-vertically-resolved-1deg-fme-ensemble-dataset-netcdfs/validation/ic_0011"
+    # =============================================
+    n_repeats: 1   # Use 10 for 100 year rollout (10 x 10 years)
+  start_indices:
+    first: 0
+    n_initial_conditions: 1
+  num_data_workers: 8
+#  The following specifies which (Spherical) DYffusion checkpoint to use. It can be
+#  a) A local path to a checkpoint file
+#  b) A huggingface model id (with the prefix "hf:")
+checkpoint_path: "hf:salv47/spherical-dyffusion/forecaster-sfno-best-inference_avg_crps.ckpt"
+# Override inference parameters and interpolator configuration
+overrides:
+  diffusion_config:
+    hack_for_imprecise_interpolation: True
+    # The following two paths are used to load the interpolator model and config
+    #   a) If pre-pending "hf:" to the path, the checkpoint will be downloaded from huggingface.
+    #   b) Otherwise, it will be loaded from the local filesystem.
+    #   c) Set it to null, to try downloading from wandb based on the interpolator_run_id & entity and project below.
+    interpolator_local_checkpoint_path: "hf:salv47/spherical-dyffusion/interpolator-sfno-best-val_avg_crps.ckpt"
+    interpolator_local_config_path: "hf:salv47/spherical-dyffusion/interpolator_sfno_paper_v0_hydra_config.yaml"
+    # As said, alternatively, just mention the entity and project to download the checkpoint from wandb.
+    interpolator_wandb_kwargs:
+      entity: null
+      project: "Spherical-DYffusion"   # potentially replace with the correct project name
+# More possible overrides:
+#    interpolator_use_ema: True
+#    use_cold_sampling_for_last_step: False
+#    use_cold_sampling_for_intermediate_steps: False
+#    use_cold_sampling_for_init_of_ar_step: True
+
+# Logging configuration
+logging:
+  project: "Spherical-DYffusion-inference"   # Where to log inference results to
+  entity: null  # Replace with <YOUR_ENTITY>
+  log_to_screen: true
+  log_to_wandb: true
+  log_to_file: true
+log_video: false
+log_zonal_mean_images: false
+data_writer:
+  # Set below to true to save predictions to xarray files (e.g. for further analysis)
+  save_prediction_files: false
