@@ -21,8 +21,7 @@ Alternatively, use the provided [environment/install_dependencies.sh](environmen
 
 Note that for some compute setups you may want to install pytorch first for proper GPU support.
 For more details about installing [PyTorch](https://pytorch.org/get-started/locally/), please refer to their official documentation.
-A typical, but not fully general (!), manual bash script that installs all dependencies is
-[install_dependencies.sh](environment/install_dependencies.sh). Feel free to use it.
+
 
 ## | Dataset
 
@@ -51,14 +50,14 @@ The available inference configurations are:
 - [ckpts_from_huggingface_debug.yaml](src/configs/inference/ckpts_from_huggingface_debug.yaml): Short inference meant for debugging with checkpoints downloaded from Hugging Face.
 - [ckpts_from_huggingface_10years.yaml](src/configs/inference/ckpts_from_huggingface_10years.yaml): 10-year-long inference with checkpoints downloaded from Hugging Face.
 
-To use these configs, **you need to correctly specify the `dataset.data_path` parameter in the configuration file to point to the validation data.**
+To use these configs, **you need to correctly specify the `dataset.data_path` parameter in the configuration file to point to the downloaded validation data.**
 ### Training
 
 We use [Hydra](https://hydra.cc/) for configuration management and [PyTorch Lightning](https://www.pytorchlightning.ai/) for training.
 We recommend familiarizing yourself with these tools before running training experiments.
 
 
-### Tips
+### Tips & Tricks
 
 <details>
     <summary>Memory Considerations and OOM Errors</summary>
