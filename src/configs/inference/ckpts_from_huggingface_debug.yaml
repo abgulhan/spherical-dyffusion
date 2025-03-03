@@ -19,6 +19,12 @@ validation_loader:
 checkpoint_path: "hf:salv47/spherical-dyffusion/forecaster-sfno-best-inference_avg_crps.ckpt"
 # Override inference parameters and interpolator configuration
 overrides:
+  datamodule_config:
+    # =============== Edit this path ===============
+    # Specify the path to the data directory containing the scaling and centering files
+    # These files are saved in the root of this repository in the `data_statistics` directory.
+    data_dir_stats: "data_statistics/"  # scaling.nc and centering.nc should be present here
+    # =============================================
   diffusion_config:
     hack_for_imprecise_interpolation: True
     # The following two paths are used to load the interpolator model and config

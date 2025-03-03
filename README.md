@@ -30,6 +30,8 @@ training and validation data can be downloaded from Google Cloud Storage followi
 of the ACE paper at https://zenodo.org/records/10791087. The data are licensed under Creative
 Commons Attribution 4.0 International.
 
+The dataset statistics that you'll need to run the experiments are saved in the [data_statistics](data_statistics) directory.
+
 ## | Checkpoints
 
 Model weights are available at [https://huggingface.co/salv47/spherical-dyffusion](https://huggingface.co/salv47/spherical-dyffusion/tree/main).
@@ -51,6 +53,8 @@ The available inference configurations are:
 - [ckpts_from_huggingface_10years.yaml](src/configs/inference/ckpts_from_huggingface_10years.yaml): 10-year-long inference with checkpoints downloaded from Hugging Face.
 
 To use these configs, **you need to correctly specify the `dataset.data_path` parameter in the configuration file to point to the downloaded validation data.**
+
+You may also need to specify the `overrides.datamodule_config.data_dir_stats` to point to the [data statistics](data_statistics) directory.
 ### Training
 
 We use [Hydra](https://hydra.cc/) for configuration management and [PyTorch Lightning](https://www.pytorchlightning.ai/) for training.

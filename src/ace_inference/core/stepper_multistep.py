@@ -112,7 +112,10 @@ class MultiStepStepper(SingleModuleStepper):
         data_dir_stats = config.data_dir_stats or config.data_dir
         path_mean = Path(data_dir_stats) / "centering.nc"
         path_std = Path(data_dir_stats) / "scaling.nc"
-        alternative_data_dirs = ["/data/climate-model/fv3gfs"]
+        alternative_data_dirs = [
+            Path(__file__).parent.parent.parent.parent / "data_statistics",
+            "/data/climate-model/fv3gfs"
+        ]
         if not path_mean.exists():
             for alt_dir in alternative_data_dirs:
                 path_mean = Path(alt_dir) / "centering.nc"
@@ -461,3 +464,4 @@ def run_on_batch_multistep(
         gen_data_norm=gen_data_norm_timeseries,
         target_data_norm=full_data_norm,
     )
+
