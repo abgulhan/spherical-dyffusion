@@ -1,0 +1,13 @@
+# @package _global_
+
+defaults:
+  - /module@_here_: _base_experiment_config.yaml   # base experiment config with defaults params
+  - _self_
+
+module:
+  autoregressive_steps: 0
+  prediction_timesteps: null
+  monitor: "val/avg/crps"
+
+model:
+  with_time_emb: True

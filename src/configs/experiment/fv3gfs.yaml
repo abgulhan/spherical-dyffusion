@@ -1,0 +1,40 @@
+# @package _global_
+
+# to execute this experiment run:
+# python run.py experiment=fv3gfs
+
+defaults:
+  - override /datamodule: fv3gfs_prescriptive_only.yaml
+  - override /model: sfno.yaml
+  - /scheduler@module.scheduler: cosine_annealing.yaml
+  - _self_
+
+name: "FV3GFS"
+module:
+  use_ema: True
+  ema_decay: 0.9999
+  monitor: "val/avg/crps"  # if using module.num_predictions > 1, automatically changes to "val/avg/crps"
+  num_predictions: 10   # Ensemble size. Effective evaluation batch size is datamodule.eval_batch_size * module.num_predictions
+  optimizer:
+    name: FusedAdam  # or set to "adamw" if not using apex.FusedAdam
+    lr: 4e-4
+    weight_decay: 5e-3
+
+trainer:
+  max_epochs: 60
+  gradient_clip_val: 0.5
+  deterministic: True
+  precision: 16
+
+datamodule:
+  batch_size: 72    # global/effective batch size, needs to be divisible by the world size (number of GPUs)
+#  batch_size_per_gpu: 2  # Optionally, set the maximum batch size per GPU. Gradient accumulation will be used to achieve the global desired batch size.
+  eval_batch_size: 16
+  window: 1
+#  max_val_samples: 32
+
+logger:
+  wandb:
+    entity: null    # Set to your Weights & Biases username or team name
+    project: "Spherical-DYffusion"
+    tags: ["fv3gfs"]

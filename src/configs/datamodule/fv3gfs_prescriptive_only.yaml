@@ -1,0 +1,60 @@
+defaults:
+  - _base_data_config.yaml   # general, dataset-independent, parameters
+  - _self_
+
+_target_: src.datamodules.fv3gfs_ensemble.FV3GFSEnsembleDataModule
+# Change the following line to point to the correct directory containing the data
+data_dir: ???
+data_dir_stats: null
+#
+training_sub_paths: null    # set to ic_0002 to train on the second ensemble member only (or any list of ensemble members)
+max_train_samples: null    # if null, use all training samples
+max_val_samples: 80       # if null, use all validation samples
+auxiliary_names: null
+# horizon for inference
+prediction_horizon: 500   #${datamodule.horizon}   # may set to higher rollouts
+prescriber:
+  _target_: src.ace_inference.core.prescriber.Prescriber
+  prescribed_name: surface_temperature
+  mask_name: ocean_fraction
+  mask_value: 1
+num_workers: 8
+forcing_names:
+  - DSWRFtoa
+  - HGTsfc
+in_names:
+  - PRESsfc
+  - surface_temperature
+  - air_temperature_0
+  - air_temperature_1
+  - air_temperature_2
+  - air_temperature_3
+  - air_temperature_4
+  - air_temperature_5
+  - air_temperature_6
+  - air_temperature_7
+  - specific_total_water_0
+  - specific_total_water_1
+  - specific_total_water_2
+  - specific_total_water_3
+  - specific_total_water_4
+  - specific_total_water_5
+  - specific_total_water_6
+  - specific_total_water_7
+  - eastward_wind_0
+  - eastward_wind_1
+  - eastward_wind_2
+  - eastward_wind_3
+  - eastward_wind_4
+  - eastward_wind_5
+  - eastward_wind_6
+  - eastward_wind_7
+  - northward_wind_0
+  - northward_wind_1
+  - northward_wind_2
+  - northward_wind_3
+  - northward_wind_4
+  - northward_wind_5
+  - northward_wind_6
+  - northward_wind_7
+out_names: ${datamodule.in_names}

@@ -1,4 +1,4 @@
-""" Slightly adapted from Zihao Zhou"""
+"""Slightly adapted from Zihao Zhou"""
 
 import fnmatch
 import glob

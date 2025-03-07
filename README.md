@@ -60,6 +60,22 @@ You may also need to specify the `overrides.datamodule_config.data_dir_stats` to
 We use [Hydra](https://hydra.cc/) for configuration management and [PyTorch Lightning](https://www.pytorchlightning.ai/) for training.
 We recommend familiarizing yourself with these tools before running training experiments.
 
+The basic configuration files used for our paper can be found in the [src/configs](src/configs) directory.
+To use them, please first specify the correct data path's in the [src/configs/datamodule/fv3gfs_prescriptive_only.yaml](src/configs/datamodule/fv3gfs_prescriptive_only.yaml) config file.
+Specifically, set ``datamodule.data_dir=<path-to-dataset>`` and ``datamodule.data_dir_stats=<path-to-data_statistics>`` appropriately.
+
+To run training, you can use the `run.py` script with a corresponding experiment configuration file.
+For example, to train Spherical DYffusion with the default configuration, first train the interpolator with:
+
+    python run.py experiment=fv3gfs_interpolation
+
+After that, train the forecaster with:
+
+    python run.py experiment=fv3gfs_dyffusion diffusion.interpolator_run_id=<interpolator_run_id>
+
+where `<interpolator_run_id>` is the Weights & Biases run ID of the interpolator experiment.
+To train the basic UNet-based DYffusion, you would additionally append `model=unet` to both commands.
+
 
 ### Tips & Tricks
 

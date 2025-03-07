@@ -145,7 +145,7 @@ def run_model(config: DictConfig) -> float:
             raise e
 
     # Testing:
-    if config.get("test_after_training") or config.get("eval_mode") == "test":
+    if config.get("eval_mode") == "test":
         if config.get("eval_mode") == "test":
             test_what = {"ckpt_path": ckpt_path, "model": model}
         else:

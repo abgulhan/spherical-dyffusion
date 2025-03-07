@@ -124,6 +124,8 @@ class Unet(BaseModel):
         init_stride: int = 1,
         num_conditions: int = 0,
         dim_head: int = 32,
+        drop_path_rate=None,
+        dropout_mlp=None,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -140,6 +142,11 @@ class Unet(BaseModel):
         input_channels = self.num_input_channels + self.num_conditional_channels
         output_channels = self.num_output_channels or input_channels
         self.save_hyperparameters()
+        if dropout_mlp is not None or drop_path_rate is not None:
+            self.log_text.warning(
+                "You have specified ``dropout_mlp`` or ``drop_path_rate``. These are not used in the current model."
+                "To affect the model's stochasticity, please use ``block_dropout`` or ``block_dropout1`` or ``attn_dropout``."
+            )
 
         if num_conditions >= 1:
             assert (
