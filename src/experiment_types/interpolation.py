@@ -6,7 +6,7 @@ from torch import Tensor
 
 from src.experiment_types._base_experiment import BaseExperiment
 from src.utilities.utils import (
-    rrearrange,
+    rrearrange, to_tensordict
 )
 
 
@@ -19,7 +19,8 @@ class InterpolationExperiment(BaseExperiment):
             self.log_text.warning("``inference_val_every_n_epochs`` will be ignored for interpolation experiments.")
         # The following saves all the args that are passed to the constructor to self.hparams
         #   e.g. access them with self.hparams.hidden_dims
-        self.save_hyperparameters(ignore=["model"])
+        #self.save_hyperparameters(ignore=["model", "seed"])
+        self.save_hyperparameters(ignore=["model", "seed"])
         assert self.horizon >= 2, "horizon must be >=2 for interpolation experiments"
         if hasattr(self.model, "set_min_max_time"):
             self.model.set_min_max_time(min_time=self.horizon_range[0], max_time=self.horizon_range[-1])
@@ -65,7 +66,15 @@ class InterpolationExperiment(BaseExperiment):
     def postprocess_inputs(self, inputs):
         inputs = self.pack_data(inputs, input_or_output="input")
         if self.hparams.stack_window_to_channel_dim:  # and inputs.shape[1] == self.window:
-            inputs = rrearrange(inputs, "b window c lat lon -> b (window c) lat lon")
+            # Handle both 5D (2D spatial) and 6D (3D spatial) inputs
+            if inputs.ndim == 5:
+                # 2D spatial data: (batch, window, channels, lat, lon)
+                inputs = rrearrange(inputs, "b window c lat lon -> b (window c) lat lon")
+            elif inputs.ndim == 6:
+                # 3D spatial data: (batch, window, channels, depth, lat, lon)
+                inputs = rrearrange(inputs, "b window c depth lat lon -> b (window c) depth lat lon")
+            else:
+                raise ValueError(f"Expected 5D or 6D input tensor, got {inputs.ndim}D with shape {inputs.shape}")
         return inputs
 
     @torch.inference_mode()
@@ -137,12 +146,16 @@ class InterpolationExperiment(BaseExperiment):
             if isinstance(target_time, int):
                 return dynamical_condition[:, target_time, ...]
             else:
-                return dynamical_condition[torch.arange(dynamical_condition.shape[0]), target_time.long(), ...]
+                if not torch.is_tensor(target_time):
+                    target_time = torch.tensor(target_time, device=dynamical_condition.device)
+                return dynamical_condition[torch.arange(dynamical_condition.shape[0]), target_time.long(), ...]        
         return None
 
     def get_inputs_from_dynamics(self, dynamics: Tensor, **kwargs) -> Tensor:
         """Get the inputs from the dynamics tensor.
         Since we are doing interpolation, this consists of the first window frames plus the last frame.
+        
+        dynamics must be a TensorDict
         """
         past_steps = dynamics[:, : self.window, ...]  # (b, window, c, lat, lon) at time 0
         last_step = dynamics[:, -1:, ...]  # (b, c, lat, lon) at time t=window+horizon
@@ -150,6 +163,59 @@ class InterpolationExperiment(BaseExperiment):
         last_step = self.postprocess_inputs(last_step)
         inputs = torch.cat([past_steps, last_step], dim=1)  # (b, window*c + c, lat, lon)
         return inputs
+
+    def interpolate(self, dynamics1: Dict[str, Tensor], dynamics2: Dict[str, Tensor], target_times: List[int], batch: bool = False) -> List[Tensor]:
+        """
+        Interpolate between two single timesteps using the SOMA interpolator model.
+        
+        Args:
+            dynamics1: Tensor of shape (1, channels, z, y, x) for the first timestep.
+            dynamics2: Tensor of shape (1, channels, z, y, x) for the second timestep.
+            target_times: List of target times to interpolate to.
+            batch: If True, treat dynamics1 and dynamics2 as batches (shape: (b, channels, z, y, x)).
+        
+        Returns:
+            A list of interpolated tensors for each target time.
+        """
+        
+        if isinstance(dynamics1, dict) and ("condition" in dynamics1.keys() or "dynamical_condition" in dynamics1.keys()):
+            raise ValueError("Conditioning is currently not supported for interpolation. Remove 'condition' or 'dynamical_condition' from dynamics1 and dynamics2.")
+        
+        if "dynamics" in dynamics1:
+            dynamics1 = dynamics1["dynamics"]
+        if "dynamics" in dynamics2:
+            dynamics2 = dynamics2["dynamics"]
+        
+        
+        start_tensor = to_tensordict(dynamics1)
+        end_tensor = to_tensordict(dynamics2)
+
+        if not batch:
+            # If not batch, we need to add a batch dimension
+            start_tensor = start_tensor.unsqueeze(0)
+            end_tensor = end_tensor.unsqueeze(0)
+
+        start_tensor = self.postprocess_inputs(start_tensor)
+        end_tensor = self.postprocess_inputs(end_tensor)
+        inputs = torch.cat([start_tensor, end_tensor], dim=1)  # (b, window*c + c, lat, lon)
+        # Move inputs to the same device as the model
+        inputs = inputs.to(self.device)
+
+
+        interpolated_tensors = []
+        for target_time in target_times:
+            # Construct time tensor
+            time_tensor = torch.full((inputs.shape[0],), target_time,
+                                   device=self.device, dtype=torch.long)
+            interpolated_tensor = self.predict(inputs, time=time_tensor)
+            #keys are: preds and preds_normed
+            
+            # save gpu memory
+            for k in interpolated_tensor.keys():
+                interpolated_tensor[k] = interpolated_tensor[k].detach().cpu()
+            interpolated_tensors.append(interpolated_tensor)
+
+        return interpolated_tensors
 
     def get_evaluation_inputs(self, dynamics: Tensor, split: str, **kwargs) -> Tensor:
         inputs = self.get_inputs_from_dynamics(dynamics)

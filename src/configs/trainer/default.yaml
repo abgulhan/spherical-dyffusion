@@ -11,7 +11,7 @@ max_epochs: 50
 gradient_clip_val: 1.0        # Gradient clipping at 1.0 of the norm
 accumulate_grad_batches: 1    # Accumulate gradients on k batches
 
-precision: 32                 # 32 or 16
+precision: 16                 # 32 or 16
 num_sanity_val_steps: 1       # number of validation steps to execute at the beginning of the training
 val_check_interval: 1.0       # how often to check the validation set (float = percent, int = num_batches)
 

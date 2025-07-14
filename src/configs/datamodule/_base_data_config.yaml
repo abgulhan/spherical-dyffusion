@@ -4,7 +4,7 @@
 #   By default, the datamodules can automatically infer if the data is stored in the subdirectories
 #             $data_dir/oisstv2   or   $data_dir/physical-nn-benchmark
 #   So, if you adhere to this naming, you can keep data_dir to point to their parent dir. By default, ``$HOME/data``
-data_dir: "${oc.env:HOME}/data"
+data_dir: "${oc.env:HOME}/WORKING/git_repos/spherical-dyffusion/data/"
 
 # --> Optional edits:
 batch_size: 64                 # batch size for training (global over all GPUs. Per-GPU batch size is batch_size // world_size)
@@ -18,5 +18,5 @@ persistent_workers: True
 drop_last: False
 verbose: ${verbose}
 
-window: 1
+#window: 1
 # seed_data: 77                # random seed for reproducibility of random data split (different to the one for training)

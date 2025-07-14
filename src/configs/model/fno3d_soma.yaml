@@ -1,0 +1,14 @@
+# SOMA-specific model configuration with denormalizing loss
+defaults:
+  - fno3d.yaml
+  - _self_
+
+# Override the loss function to use SOMA denormalizing loss
+loss_function:
+  _target_: src.losses.soma_losses.SOMADenormalizingLoss
+  base_loss_fn:
+    _target_: torch.nn.MSELoss
+    reduction: mean
+
+# SOMA-specific model settings
+name: "FNO3D-SOMA"

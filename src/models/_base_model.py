@@ -88,6 +88,17 @@ class BaseModel(LightningModule):
                 assert k in ["preds"], f"Invalid loss function key: {k}"
 
             criterion = self.get_loss_callable()
+            
+            # Check if SOMA loss is being used
+            is_soma_loss = hasattr(criterion, '__class__') and 'SOMADenormalizingLoss' in str(type(criterion))
+            
+            if is_soma_loss:
+                self.log_text.info("🔥" * 20)
+                self.log_text.info("🔥 USING SOMA DENORMALIZING LOSS! 🔥")
+                self.log_text.info("🔥" * 20)
+            else:
+                self.log_text.info("ℹ️  Using standard loss function (not SOMA)")
+                
             print_text = (
                 f"Criterion: {criterion} with weights: {self.loss_function_weights}"
                 if loss_function_weights

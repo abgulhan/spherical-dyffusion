@@ -80,7 +80,7 @@ class SingleModuleStepperConfig:
             )
             del self.prescriber
 
-    def get_data_requirements(self, n_forward_steps: int) -> DataRequirements:
+    def (self, n_forward_steps: int) -> DataRequirements:
         return DataRequirements(
             names=self.all_names,
             n_timesteps=n_forward_steps + 1,

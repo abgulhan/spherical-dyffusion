@@ -178,7 +178,7 @@ class XarrayDataset(Dataset):
         ds = self._open_file(0)
         self._get_metadata(ds)
 
-        verbose = False
+        verbose = True
         if verbose:
             for i in range(len(self.names)):
                 if self.names[i] in ds.variables:
@@ -253,7 +253,18 @@ class XarrayDataset(Dataset):
                 training and inference) and its corresponding time coordinates.
         """
         time_slice = slice(idx, idx + self.n_steps)
-        return self.get_sample_by_time_slice(time_slice)
+        result = self.get_sample_by_time_slice(time_slice)
+        # print(f"Got sample for time slice {time_slice} (idx={idx})")
+        # tensors, times = result
+        # print("Tensors:")
+        # for key, value in tensors.items():
+        #     print(f"  Variable '{key}': shape={value.shape}, dtype={value.dtype}")
+        #     if isinstance(value, torch.Tensor) and value.ndim > 1:
+        #         print(f"    min={value.min().item()}, max={value.max().item()}")
+        # print("Times (xr.DataArray):")
+        # print(f"  shape={times.shape}, dtype={times.dtype}")
+        # print(f"  values={times.values}")
+        return result
 
     def get_sample_by_time_slice(self, time_slice: slice) -> Tuple[Dict[str, torch.Tensor], xr.DataArray]:
         input_file_idx, input_local_idx = get_file_local_index(time_slice.start, self.start_indices)
@@ -309,7 +320,10 @@ class XarrayDatasetSalva(XarrayDataset):
         **kwargs,
     ):
         super().__init__(*args, **kwargs)
-        self.forcing_names = forcing_names if len(forcing_names) > 0 else None
+        if forcing_names is None:
+            self.forcing_names = None
+        else:
+            self.forcing_names = forcing_names if len(forcing_names) > 0 else None
         self.forcing_packer = forcing_packer
         self.forcing_normalizer = forcing_normalizer
         self.min_idx_shift = min_idx_shift

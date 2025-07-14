@@ -1,0 +1,22 @@
+defaults:
+  - _self_
+  - _base_model_config.yaml
+
+_target_: src.models.fno.fnonet3d.FourierNeuralOperatorNet3D
+embed_dim: 64
+num_layers: 4
+num_fno_modes: 16
+padding: 8
+padding_type: "constant"
+activation_function: "gelu"
+normalization_layer: "instance_norm"
+dropout: 0.0
+big_skip: true
+use_mlp: false
+mlp_ratio: 2.0
+pos_embed: false
+# Set these as needed for your data:
+# TODO set automatically from data using datamodule
+in_chans: 12  # Will be set dynamically by the experiment for interpolation
+# out_chans: 5  # This should be determined dynamically by the experiment class
+img_shape: [60, 100, 100]

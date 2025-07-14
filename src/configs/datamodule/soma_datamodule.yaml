@@ -1,0 +1,60 @@
+defaults:
+  - _base_data_config.yaml   # general, dataset-independent, parameters
+  - _self_
+
+_target_: src.datamodules.SOMA_datamodule.MyCustomDataModule
+
+# Required arguments
+data_path: /global/homes/a/abgulhan/WORKING/ml_converted/data-gm-year7-22-biweekly.hdf5 
+# data_path defined in soma_interpolation.yaml
+model_config: null
+param_names:
+  - timeDaily_avg_layerThickness
+  - timeDaily_avg_velocityZonal
+  - timeDaily_avg_velocityMeridional
+  - timeDaily_avg_activeTracers_temperature
+  - timeDaily_avg_activeTracers_salinity
+  - var_x
+forcing_names: null
+in_names: 
+  - timeDaily_avg_layerThickness
+  - timeDaily_avg_velocityZonal
+  - timeDaily_avg_velocityMeridional
+  - timeDaily_avg_activeTracers_temperature
+  - timeDaily_avg_activeTracers_salinity
+  - var_x
+out_names: 
+  - timeDaily_avg_layerThickness
+  - timeDaily_avg_velocityZonal
+  - timeDaily_avg_velocityMeridional
+  - timeDaily_avg_activeTracers_temperature
+  - timeDaily_avg_activeTracers_salinity
+
+# Data loading and batching # these are set in the experiment config
+# horizon: 20
+# batch_size: 16
+# eval_batch_size: 16
+# num_workers: 4
+
+# Data split and reproducibility
+train_val_test_split_ratios: [0.8, 0.1, 0.1]
+seed_data: 42
+time_steps_per_run: null
+# var_param_channel_index: null  # Uncomment if needed in code
+pin_memory: true
+data_dir: null
+time_interval: 14
+
+# Area weights configuration
+use_mesh_area_weights: false  # SOMA uses uniform grid, so uniform weights are appropriate
+                              # Set to true for non-uniform grids that require mesh file
+
+# Normalization and masking configuration
+standardize: true  # Enable data normalization using precomputed statistics
+stats_path: null   # Use default location: data_dir/training_statistics_per_level_state.npz
+
+prescriber:
+   _target_: src.ace_inference.core.prescriber.NullPrescriber
+#   prescribed_name: surface_temperature
+#   mask_name: ocean_fraction
+#   mask_value: 1

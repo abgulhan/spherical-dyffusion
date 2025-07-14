@@ -3,6 +3,8 @@ from __future__ import annotations
 import glob
 import logging
 import os
+import time
+import functools
 from collections import defaultdict
 from datetime import datetime, timezone
 from typing import Any, Callable, Dict, List, Optional, Sequence, Union
@@ -11,14 +13,70 @@ import numpy as np
 import pandas as pd
 import requests
 import wandb
+import wandb.errors
 from omegaconf import DictConfig, OmegaConf
 from tqdm.auto import tqdm
+from requests.exceptions import HTTPError, ConnectionError, RequestException
 
 from src.utilities.checkpointing import (
     get_local_ckpt_path,
     local_path_to_absolute_and_download_if_needed,
 )
 from src.utilities.utils import find_config_differences_return_as_joined_str, get_logger
+
+
+def wandb_retry(max_retries=5, initial_delay=1.0, backoff_factor=2.0, max_delay=60.0):
+    """
+    Decorator to retry wandb API calls with exponential backoff.
+    
+    Args:
+        max_retries: Maximum number of retry attempts
+        initial_delay: Initial delay between retries in seconds
+        backoff_factor: Multiplier for delay after each retry
+        max_delay: Maximum delay between retries
+    """
+    def decorator(func):
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            log = get_logger(__name__)
+            delay = initial_delay
+            last_exception = None
+            
+            for attempt in range(max_retries + 1):
+                try:
+                    return func(*args, **kwargs)
+                except (HTTPError, ConnectionError, RequestException, wandb.errors.CommError) as e:
+                    last_exception = e
+                    error_msg = str(e).lower()
+                    
+                    # Check if it's a retryable error
+                    retryable_errors = [
+                        '502', '503', '504',  # Server errors
+                        'bad gateway', 'service unavailable', 'gateway timeout',
+                        'connection error', 'timeout', 'network'
+                    ]
+                    
+                    is_retryable = any(error in error_msg for error in retryable_errors)
+                    
+                    if not is_retryable or attempt >= max_retries:
+                        log.error(f"Wandb API call failed after {attempt + 1} attempts: {e}")
+                        raise e
+                    
+                    log.warning(f"Wandb API call failed (attempt {attempt + 1}/{max_retries + 1}): {e}")
+                    log.info(f"Retrying in {delay:.1f} seconds...")
+                    time.sleep(delay)
+                    delay = min(delay * backoff_factor, max_delay)
+                    
+                except Exception as e:
+                    # Non-retryable error, raise immediately
+                    log.error(f"Non-retryable error in wandb API call: {e}")
+                    raise e
+            
+            # This should never be reached, but just in case
+            raise last_exception
+        
+        return wrapper
+    return decorator
 
 
 # Override this in your project
@@ -50,6 +108,7 @@ def get_training_run_path():
     return _TRAINING_RUN_PATH
 
 
+@wandb_retry(max_retries=3, initial_delay=1.0)
 def get_api(wandb_api: wandb.Api = None, timeout=100) -> wandb.Api:
     if wandb_api is None:
         try:
@@ -67,6 +126,7 @@ def get_api_and_set_entity(entity: str = None, wandb_api: wandb.Api = None) -> w
     return api
 
 
+@wandb_retry(max_retries=5, initial_delay=2.0)
 def get_run_api(
     run_id: str = None,
     entity: str = None,
@@ -82,6 +142,7 @@ def get_run_api(
     return api.run(run_path)
 
 
+@wandb_retry(max_retries=5, initial_delay=2.0)
 def get_project_runs(
     entity: str = None, project: str = None, wandb_api: wandb.Api = None, **kwargs
 ) -> List[wandb.apis.public.Run]:
@@ -97,6 +158,7 @@ def get_project_groups(
     return list(set([run.group for run in runs]))
 
 
+@wandb_retry(max_retries=5, initial_delay=2.0)
 def get_runs_for_group(
     group: str,
     entity: str = None,
@@ -448,6 +510,7 @@ def does_any_ckpt_file_exist(wandb_run: wandb.apis.public.Run, only_best_and_las
     return len([1 for f in wandb_run.files(names=names) if f.name.endswith(".ckpt")]) > 0
 
 
+@wandb_retry(max_retries=5, initial_delay=2.0)
 def get_existing_wandb_group_runs(
     config: DictConfig, ckpt_must_exist: bool = False, **kwargs
 ) -> List[wandb.apis.public.Run]:
@@ -753,6 +816,7 @@ def get_filter_for_wandb(
     return filter_wandb_api
 
 
+@wandb_retry(max_retries=5, initial_delay=2.0)
 def wandb_project_run_filtered(
     hyperparam_filter: Dict[str, Any] = None,
     extra_filters: Dict[str, Any] = None,

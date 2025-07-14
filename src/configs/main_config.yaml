@@ -48,7 +48,7 @@ verbose: True
 
 # Global seed for random number generators in pytorch, numpy and python.random for reproducibility
 # Note: It does *not* apply to the data split, which is done based on the random seed specified in the datamodule
-seed: 11
+seed: 2
 
 torch_matmul_precision: "high"   # choose from "highest", "high", "medium" for speed/precision tradeoff
 

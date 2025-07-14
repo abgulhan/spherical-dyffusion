@@ -14,4 +14,5 @@ model_checkpoint:
   dirpath: ${ckpt_dir}
   filename: "${name}_${name_suffix}_epoch{epoch:03d}_seed${seed}"
   auto_insert_metric_name: False
-  # every_n_epochs: 10
+  every_n_epochs: 1
+  

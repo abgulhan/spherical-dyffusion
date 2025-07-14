@@ -236,8 +236,8 @@ class FV3GFSDataset(Dataset):
     def __getitem__(self, idx):
         idx = idx + self.min_idx_shift  # Shift indices to avoid overlap between val & test
         data = self.load_series_data(idx=idx, names=self.in_or_out_names, **self.shared_kwargs)
-        # data_shape = data[list(data.keys())[0]].shape
-        # print(f'Loaded data with shape {data_shape}')
+        data_shape = data[list(data.keys())[0]].shape
+        print(f'FV3GFSFDataset: Loaded data with shape {data_shape}')
         # data = TensorDict(data, batch_size=data_shape)
         if self.forcing_names is not None:
             if self.multistep_strategy in ["random", "interpolation"]:

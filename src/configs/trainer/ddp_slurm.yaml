@@ -1,0 +1,19 @@
+defaults:
+  - default.yaml
+
+devices: "auto"  # Use all available GPUs per node
+strategy: "ddp_find_unused_parameters_false"
+accelerator: "gpu"
+num_nodes: 3  # Will be overridden by command line
+
+# Enable SLURM environment variable detection
+# PyTorch Lightning will automatically detect SLURM environment
+# and use SLURM_PROCID, SLURM_NTASKS, etc. for DDP setup
+
+# Additional settings for robust multi-node training
+sync_batchnorm: true
+enable_progress_bar: true  # Only rank 0 will show progress bar
+
+# Ensure deterministic results across runs
+deterministic: false  # Keep false for performance, enable if exact reproducibility needed
+benchmark: true       # Keep cudnn benchmark for performance

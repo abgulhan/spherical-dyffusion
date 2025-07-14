@@ -478,7 +478,11 @@ class BaseExperiment(LightningModule):
         ):
             kwargs["num_predictions"] = self.num_predictions_in_mem
 
-        results = self.model.predict_forward(*inputs, **kwargs)  # by default, just call the forward method
+        # --- FIX: Only pass a single input tensor or dict to the model, not *inputs ---
+        if len(inputs) == 1:
+            results = self.model.predict_forward(inputs[0], **kwargs)
+        else:
+            raise ValueError(f"FNO3D model expects a single input tensor or dict, got {len(inputs)} inputs.")
         if torch.is_tensor(results):
             results = {"preds": results}
 
@@ -661,6 +665,26 @@ class BaseExperiment(LightningModule):
 
     def on_fit_start(self) -> None:
         self.on_any_start(stage="fit")
+        # Set up datamodule reference for any losses that need it
+        self._setup_datamodule_for_losses()
+
+    def _setup_datamodule_for_losses(self):
+        """Set up datamodule reference for any losses that need it."""
+        if hasattr(self.model, "criterion") and self.model.criterion is not None:
+            def setup_loss_with_datamodule(loss_fn):
+                """Helper to set datamodule reference in losses that need it."""
+                if hasattr(loss_fn, 'set_datamodule'):
+                    loss_fn.set_datamodule(self.datamodule)
+                    self.log_text.info(f"Set datamodule reference for {type(loss_fn).__name__}")
+
+            if isinstance(self.model.criterion, torch.nn.ModuleDict):
+                for key, loss_fn in self.model.criterion.items():
+                    setup_loss_with_datamodule(loss_fn)
+            elif isinstance(self.model.criterion, dict):
+                for key, loss_fn in self.model.criterion.items():
+                    setup_loss_with_datamodule(loss_fn)
+            else:
+                setup_loss_with_datamodule(self.model.criterion)
 
     def on_validation_start(self) -> None:
         self.on_any_start(stage="val")

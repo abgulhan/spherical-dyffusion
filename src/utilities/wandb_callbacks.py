@@ -52,6 +52,8 @@ class WatchModel(Callback):
             # self.log_type = "parameters"
             self.on_train_start(trainer, pl_module)
             # log.info(f"wandb.run.hook_handles: {wandb.run._torch_history._hook_handles.keys()}")
+            if wandb.run is None or (not hasattr(wandb.run, '_torch_history')) or wandb.run._torch_history is None:
+                return
             param_hook_handle = wandb.run._torch_history._hook_handles.get("parameters/")  # a RemovableHandle
             # log.info(param_hook_handle.hooks_dict_ref())
             param_hook = param_hook_handle.hooks_dict_ref()[param_hook_handle.id]

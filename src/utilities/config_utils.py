@@ -10,6 +10,7 @@ import pytorch_lightning as pl
 import requests
 import torch
 import wandb
+import wandb.errors
 from hydra.core.global_hydra import GlobalHydra
 from omegaconf import DictConfig, OmegaConf, open_dict
 from pytorch_lightning.utilities import rank_zero_only
@@ -134,9 +135,17 @@ def extras(
                     f"Resuming experiment with wandb run ID = {resume_run_id} on NEW run: ``{config.logger.wandb.id}``"
                 )
 
-            run_api = get_run_api(
-                run_id=resume_run_id, entity=config.logger.wandb.entity, project=config.logger.wandb.project
-            )
+            try:
+                run_api = get_run_api(
+                    run_id=resume_run_id, entity=config.logger.wandb.entity, project=config.logger.wandb.project
+                )
+            except (requests.exceptions.HTTPError, requests.exceptions.ConnectionError, wandb.errors.CommError) as e:
+                log.error(f"Failed to get run API for resuming run {resume_run_id}. Network/server error: {e}")
+                raise e
+            except Exception as e:
+                log.error(f"Unexpected error getting run API for resuming run {resume_run_id}: {e}")
+                raise e
+                
             # Set config wandb keys in case they were none, to the wandb defaults
             keys_to_set = [k for k in wandb_cfg.keys() if k != "id"]
             for k in keys_to_set:
@@ -171,7 +180,15 @@ def extras(
 
             if if_wandb_run_already_exists in ["abort", "resume"]:
                 wandb_status = "new"
-                runs_in_group = get_existing_wandb_group_runs(config, ckpt_must_exist=True, only_best_and_last=False)
+                try:
+                    runs_in_group = get_existing_wandb_group_runs(config, ckpt_must_exist=True, only_best_and_last=False)
+                except (requests.exceptions.HTTPError, requests.exceptions.ConnectionError, wandb.errors.CommError) as e:
+                    log.warning(f"Error when getting runs in group. Network/server error, will continue without checking for existing runs. Error: {e}")
+                    runs_in_group = []
+                except Exception as e:
+                    log.warning(f"Unexpected error when getting runs in group. Will continue without checking for existing runs. Error: {e}")
+                    runs_in_group = []
+                    
                 if len(runs_in_group) > 0:
                     log.info(f"Found {len(runs_in_group)} runs for group {group}")
                 for other_run in runs_in_group:
@@ -231,9 +248,18 @@ def extras(
 
         # NEW CODE:
         if run_api is None:
-            run_api = get_run_api(run_path=run_path)
+            try:
+                run_api = get_run_api(run_path=run_path)
+            except (requests.exceptions.HTTPError, requests.exceptions.ConnectionError, wandb.errors.CommError) as e:
+                log.error(f"Failed to get run API for resuming run {run_path}. Network/server error: {e}")
+                raise e
+            except Exception as e:
+                log.error(f"Unexpected error getting run API for resuming run {run_path}: {e}")
+                raise e
         # original overrides + command line overrides (latter take precedence)
-        overrides = run_api.metadata["args"] + sys.argv[1:]
+        # Handle cases where "args" key might not exist in metadata
+        original_args = run_api.metadata.get("args", [])
+        overrides = original_args + sys.argv[1:]
         GlobalHydra.instance().clear()
         with hydra.initialize(version_base=None, config_path="../configs"):
             new_config = hydra.compose(config_name="main_config.yaml", overrides=overrides)
@@ -412,7 +438,15 @@ def extras(
                 train_run_path = (
                     f"{config.logger.wandb.entity}/{wandb_api._PROJECT_TRAIN}/{config.logger.wandb.training_id}"
                 )
-                train_run = get_run_api(run_path=train_run_path)
+                try:
+                    train_run = get_run_api(run_path=train_run_path)
+                except (requests.exceptions.HTTPError, requests.exceptions.ConnectionError, wandb.errors.CommError) as e:
+                    log.error(f"Failed to get training run API for {train_run_path}. Network/server error: {e}")
+                    raise e
+                except Exception as e:
+                    log.error(f"Unexpected error getting training run API for {train_run_path}: {e}")
+                    raise e
+                    
                 with open_dict(config):
                     config.logger.wandb.train_run_path = wandb_api._TRAINING_RUN_PATH = train_run_path
                     config.logger.wandb.project = wandb_api.PROJECT = config.logger.wandb.pop("project_test")
@@ -424,9 +458,12 @@ def extras(
                     runs_in_group = get_existing_wandb_group_runs(
                         config, ckpt_must_exist=False, only_best_and_last=False
                     )
-                except requests.exceptions.HTTPError as e:
-                    # 500 Server Error: Internal Server Error for url: https://api.wandb.ai/graphql
-                    log.warning(f"Error when getting runs in group. Not checking for existing test runs. Error: {e}")
+                except (requests.exceptions.HTTPError, requests.exceptions.ConnectionError, wandb.errors.CommError) as e:
+                    # 500/502/503 Server Error: Internal Server Error for url: https://api.wandb.ai/graphql
+                    log.warning(f"Error when getting runs in group. Network/server error, not checking for existing test runs. Error: {e}")
+                    runs_in_group = []
+                except Exception as e:
+                    log.warning(f"Unexpected error when getting runs in group. Not checking for existing test runs. Error: {e}")
                     runs_in_group = []
                 for other_run in runs_in_group:
                     if other_run.config.get("seed") is None or config.get("eval_mode") == "predict":
@@ -670,11 +707,42 @@ def check_config_values(config: DictConfig):
         else:
             # Set the batch size per GPU, and accumulate_grad_batches based on the number of GPUs and nodes
             batch_size = int(config.datamodule.get("batch_size", 1))  # Global batch size
-            bs_per_gpu_total = batch_size // world_size  # effective batch size per GPU
             bs_per_gpu = config.datamodule.get("batch_size_per_gpu")
-            if bs_per_gpu is None or bs_per_gpu > bs_per_gpu_total:
+            
+            # If batch_size_per_gpu is explicitly set, calculate global batch size from it
+            if bs_per_gpu is not None:
+                calculated_global_batch_size = bs_per_gpu * world_size
+                if batch_size != calculated_global_batch_size:
+                    log.info(
+                        f"Adjusting global batch_size from {batch_size} to {calculated_global_batch_size} "
+                        f"based on batch_size_per_gpu={bs_per_gpu} and world_size={world_size}"
+                    )
+                    batch_size = calculated_global_batch_size
+                    config.datamodule.batch_size = batch_size
+                bs_per_gpu_total = bs_per_gpu
+                acc = 1  # No gradient accumulation needed
+            else:
+                # Calculate batch size per GPU from global batch size
+                bs_per_gpu_total = batch_size // world_size  # effective batch size per GPU
+                
+                # Validate that batch size is compatible with world size
+                if bs_per_gpu_total == 0:
+                    raise ValueError(
+                        f"Global batch_size ({batch_size}) is smaller than world_size ({world_size}). "
+                        f"Each GPU would need to process {batch_size/world_size:.2f} samples, but minimum is 1. "
+                        f"Please increase datamodule.batch_size to at least {world_size} or reduce the number of GPUs/nodes."
+                    )
+                
                 bs_per_gpu = bs_per_gpu_total
-            acc = bs_per_gpu_total // bs_per_gpu
+                acc = 1  # No gradient accumulation by default
+            
+            # Additional validation to prevent division by zero
+            if bs_per_gpu == 0:
+                raise ValueError(
+                    f"Calculated batch_size_per_gpu is 0. This can happen when global batch_size ({batch_size}) "
+                    f"is too small for world_size ({world_size}). Please increase datamodule.batch_size."
+                )
+                
             acc2 = config.trainer.get("accumulate_grad_batches")
             assert (
                 acc2 in [None, 1] or acc2 == acc

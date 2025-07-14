@@ -195,6 +195,7 @@ class FV3GFSEnsembleDataModule(BaseDataModule):
 
     @property
     def validation_set_names(self) -> List[str]:
+        raise_error_if_invalid_type(self._data_val, possible_types=[list, XarrayDatasetSalva], name="_data_val")
         return ["val", "inference"] if len(self._data_val) > 1 else ["val"]
 
     def get_horizon(self, split: str, dataloader_idx: int = 0) -> int:

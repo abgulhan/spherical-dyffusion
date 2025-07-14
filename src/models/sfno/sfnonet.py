@@ -548,6 +548,7 @@ class SphericalFourierNeuralOperatorNet(BaseModel):
                 isht_handle = thd.DistributedInverseRealSHT
 
             # set up
+            print("!!!!!sfnonet Debug: sht_handle =", sht_handle, "isht_handle =", isht_handle, "img_shape =", self.img_shape, "modes_lat =", modes_lat, "modes_lon =", modes_lon, "data_grid =", data_grid)
             self.trans_down = sht_handle(*self.img_shape, lmax=modes_lat, mmax=modes_lon, grid=data_grid).float()
             self.itrans_up = isht_handle(*self.img_shape, lmax=modes_lat, mmax=modes_lon, grid=data_grid).float()
             self.trans = sht_handle(self.h, self.w, lmax=modes_lat, mmax=modes_lon, grid="legendre-gauss").float()
@@ -797,7 +798,7 @@ class SphericalFourierNeuralOperatorNet(BaseModel):
     def forward(
         self, inputs, time=None, condition=None, static_condition=None, return_time_emb: bool = False, **kwargs
     ):
-        # print(f"{(inputs.shape if inputs is not None else None)}, {(condition.shape if condition is not None else None)}, {(static_condition.shape if static_condition is not None else None)}")
+        #print(f"sfonet: {(inputs.shape if inputs is not None else None)}, {(condition.shape if condition is not None else None)}, {(static_condition.shape if static_condition is not None else None)}")
         x = self.concat_condition_if_needed(inputs, condition, static_condition)
         # if x.shape[0] == 0: raise ValueError(f'x.shape[0] == 0. x.shape: {x.shape}, inputs.shape: {inputs.shape}, condition.shape: {condition.shape}')
         # save big skip

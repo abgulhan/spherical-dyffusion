@@ -110,6 +110,21 @@ def run_model(config: DictConfig) -> float:
     # Obtain the instantiated model and data classes from the config
     model, datamodule = get_model_and_data(config)
 
+    # FINAL FILTER: Remove deprecated parameters right before trainer instantiation
+    deprecated_trainer_params = [
+        "replace_sampler_ddp",
+        "distributed_backend", 
+        "prepare_data_per_node",
+        "terminate_on_nan",
+    ]
+    
+    from omegaconf import open_dict
+    with open_dict(config):
+        for param in deprecated_trainer_params:
+            if param in config.trainer:
+                removed_value = config.trainer.pop(param)
+                log.info(f"Removed deprecated trainer parameter '{param}' with value '{removed_value}' from config")
+    
     # Init Lightning trainer
     trainer: pl.Trainer = hydra.utils.instantiate(config.trainer, callbacks=callbacks, logger=loggers)
 

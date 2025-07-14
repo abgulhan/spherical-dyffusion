@@ -260,6 +260,8 @@ def clean_name(class_name, mixer=None, dm_type=None) -> str:
     """This names the model class paths with a more concise name."""
     if "SphericalFourierNeuralOperatorNet" in class_name:
         return "SFNO"
+    elif "FourierNeuralOperatorNet3D" in class_name:
+        return "FNO3D"
     elif "unet_simple" in class_name:
         s = "SimpleUnet"
     elif "Unet" in class_name:

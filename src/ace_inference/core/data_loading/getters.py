@@ -29,6 +29,9 @@ def _all_same(iterable, cmp=lambda x, y: x == y):
 
 def _subset_dataset(dataset: Dataset, subset: slice) -> Dataset:
     """Returns a subset of the dataset and propagates other properties."""
+    print(f"Dataset class: {dataset.__class__.__name__}")
+    print(f"Subsetting dataset {dataset} with slice {subset}")
+    print(f"Dataset length: {len(dataset)}")
     indices = range(len(dataset))[subset]
     subsetted_dataset = torch.utils.data.Subset(dataset, indices)
     subsetted_dataset.metadata = dataset.metadata

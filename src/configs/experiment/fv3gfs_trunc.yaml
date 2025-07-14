@@ -1,0 +1,39 @@
+# @package _global_
+
+# to execute this experiment run:
+# python run.py experiment=fv3gfs
+
+defaults:
+  - override /scheduler@module.scheduler: cosine_annealing.yaml
+  - override /datamodule: fv3gfs_prescriptive_only_trunc.yaml #fv3gfs_prescriptive_only_trunc.yaml
+  - override /model: sfno.yaml
+  - _self_
+
+name: "FV3GFS"
+module:
+  use_ema: True
+  ema_decay: 0.9999
+  monitor: "val/avg/crps"
+  num_predictions: 10
+  optimizer:
+    name: adamw
+    lr: 4e-4
+    weight_decay: 5e-3
+
+trainer:
+  max_epochs: 60
+  gradient_clip_val: 0.5
+  deterministic: True
+  precision: 16
+
+datamodule:
+  batch_size: 4 #72
+  eval_batch_size: 4 #16
+  window: 1
+
+logger:
+  none:  # Set to None to disable logging
+#  wandb:
+#    entity: null
+#    project: "Spherical-DYffusion"
+#    tags: ["fv3gfs_trunc"]

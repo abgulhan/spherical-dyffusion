@@ -253,3 +253,132 @@ class LossConfig:
         else:
             final_loss = main_loss
         return final_loss.to(device=get_device())
+
+
+# Helper function to compute total quantity (sum over all non-batch dimensions)
+def _compute_total_quantity(tensor: torch.Tensor) -> torch.Tensor:
+    """Computes the sum of a tensor over all dimensions except the first (batch) dimension.
+    Args:
+        tensor: A tensor of shape [batch, ...].
+    Returns:
+        A tensor of shape [batch] representing the sum for each sample.
+    """
+    if tensor.ndim == 0: # Scalar tensor
+        return tensor
+    if tensor.ndim == 1: # Already [batch]
+        return tensor
+    return tensor.reshape(tensor.size(0), -1).sum(dim=1)
+
+
+class TotalVolumeLoss(torch.nn.Module):
+    """
+    Computes a loss on the difference between predicted and target total volume.
+    Total volume is calculated as the sum of all layer thickness values for each sample.
+    """
+    def __init__(self, loss_fn: torch.nn.Module, layer_thickness_key: str = 'timeDaily_avg_layerThickness'):
+        """
+        Args:
+            loss_fn: The base loss function (e.g., nn.MSELoss(), nn.L1Loss()) to apply
+                     to the difference in total volumes.
+            layer_thickness_key: The key for layer thickness data in the input mappings.
+        """
+        super().__init__()
+        self.loss_fn = loss_fn
+        self.layer_thickness_key = layer_thickness_key
+
+    def forward(self, pred_data: Mapping[str, torch.Tensor], target_data: Mapping[str, torch.Tensor]) -> torch.Tensor:
+        pred_layer_thickness = pred_data.get(self.layer_thickness_key)
+        target_layer_thickness = target_data.get(self.layer_thickness_key)
+
+        if pred_layer_thickness is None:
+            raise KeyError(f"Layer thickness key '{self.layer_thickness_key}' not found in predicted data.")
+        if target_layer_thickness is None:
+            raise KeyError(f"Layer thickness key '{self.layer_thickness_key}' not found in target data.")
+
+        pred_total_volume = _compute_total_quantity(pred_layer_thickness)
+        target_total_volume = _compute_total_quantity(target_layer_thickness)
+
+        return self.loss_fn(pred_total_volume, target_total_volume)
+
+
+class TotalSaltLoss(torch.nn.Module):
+    """
+    Computes a loss on the difference between predicted and target total salt.
+    Total salt is calculated as the sum of (layer_thickness * salinity) for each cell,
+    summed up for each sample.
+    """
+    def __init__(self,
+                 loss_fn: torch.nn.Module,
+                 layer_thickness_key: str = 'timeDaily_avg_layerThickness',
+                 salinity_key: str = 'timeDaily_avg_activeTracers_salinity'):
+        """
+        Args:
+            loss_fn: The base loss function (e.g., nn.MSELoss(), nn.L1Loss()) to apply
+                     to the difference in total salt.
+            layer_thickness_key: The key for layer thickness data in the input mappings.
+            salinity_key: The key for salinity data in the input mappings.
+        """
+        super().__init__()
+        self.loss_fn = loss_fn
+        self.layer_thickness_key = layer_thickness_key
+        self.salinity_key = salinity_key
+
+    def forward(self, pred_data: Mapping[str, torch.Tensor], target_data: Mapping[str, torch.Tensor]) -> torch.Tensor:
+        pred_layer_thickness = pred_data.get(self.layer_thickness_key)
+        pred_salinity = pred_data.get(self.salinity_key)
+        target_layer_thickness = target_data.get(self.layer_thickness_key)
+        target_salinity = target_data.get(self.salinity_key)
+
+        if pred_layer_thickness is None:
+            raise KeyError(f"Layer thickness key '{self.layer_thickness_key}' not found in predicted data.")
+        if pred_salinity is None:
+            raise KeyError(f"Salinity key '{self.salinity_key}' not found in predicted data.")
+        if target_layer_thickness is None:
+            raise KeyError(f"Layer thickness key '{self.layer_thickness_key}' not found in target data.")
+        if target_salinity is None:
+            raise KeyError(f"Salinity key '{self.salinity_key}' not found in target data.")
+
+        pred_salt_integrand = pred_layer_thickness * pred_salinity
+        target_salt_integrand = target_layer_thickness * target_salinity
+
+        pred_total_salt = _compute_total_quantity(pred_salt_integrand)
+        target_total_salt = _compute_total_quantity(target_salt_integrand)
+
+        return self.loss_fn(pred_total_salt, target_total_salt)
+
+
+# Example of how you might define configuration dataclasses for these (optional):
+@dataclasses.dataclass
+class TotalVolumeLossConfig:
+    weight: float = 1.0
+    loss_fn_type: Literal["MSE", "L1"] = "MSE"
+    layer_thickness_key: str = 'timeDaily_avg_layerThickness'
+
+    def build(self) -> TotalVolumeLoss:
+        if self.loss_fn_type == "MSE":
+            loss_fn = torch.nn.MSELoss()
+        elif self.loss_fn_type == "L1":
+            loss_fn = torch.nn.L1Loss()
+        else:
+            raise ValueError(f"Unsupported loss_fn_type: {self.loss_fn_type}")
+        return TotalVolumeLoss(loss_fn=loss_fn.to(get_device()), layer_thickness_key=self.layer_thickness_key)
+
+@dataclasses.dataclass
+class TotalSaltLossConfig:
+    weight: float = 1.0
+    loss_fn_type: Literal["MSE", "L1"] = "MSE"
+    layer_thickness_key: str = 'timeDaily_avg_layerThickness'
+    salinity_key: str = 'timeDaily_avg_activeTracers_salinity'
+
+    def build(self) -> TotalSaltLoss:
+        if self.loss_fn_type == "MSE":
+            loss_fn = torch.nn.MSELoss()
+        elif self.loss_fn_type == "L1":
+            loss_fn = torch.nn.L1Loss()
+        else:
+            raise ValueError(f"Unsupported loss_fn_type: {self.loss_fn_type}")
+        return TotalSaltLoss(
+            loss_fn=loss_fn.to(get_device()),
+            layer_thickness_key=self.layer_thickness_key,
+            salinity_key=self.salinity_key
+        )

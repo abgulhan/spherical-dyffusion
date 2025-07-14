@@ -1,0 +1,39 @@
+# @package _global_
+
+# To execute this experiment run:
+# python run.py experiment=soma_interpolation
+
+defaults:
+  - soma.yaml  # base config for SOMA dataset (edit if needed)
+  - override /module: interpolation.yaml
+  - override /model: fno3d_interpolation.yaml  # Use interpolation-specific model config
+  - _self_
+
+name: "SOMA-Ipol${datamodule.horizon}h"
+
+datamodule:
+  data_path: /global/homes/a/abgulhan/WORKING/ml_converted/data-gm-year7-22-biweekly.hdf5
+  batch_size: 4  # Global batch size across all GPUs (will be auto-adjusted if batch_size_per_gpu is set)
+  batch_size_per_gpu: 2  # Each GPU processes 2 samples per batch - this will drive the calculation
+  eval_batch_size: 4
+  num_workers: 1  # Increased for faster data loading (4 workers per GPU)
+  horizon: 24
+  window: 1  # Explicitly set window to 1 for single initial condition
+  window_step: 3  # Step size distance between window indices, set to 1 for single initial condition. Set 2 to halve data points (and number of steps), etc.
+  time_interval: 14  # days between samples, not used
+#  prediction_horizon: null
+#  prediction_horizon_long: null
+
+module:
+  enable_inference_dropout: True
+
+trainer:
+  accumulate_grad_batches: 1  # Ensure no gradient accumulation for better performance
+
+model:
+  drop_path_rate: 0.1
+  dropout_mlp: 0.1
+
+logger:
+  wandb:
+    tags: ["soma", "interpolation"]
