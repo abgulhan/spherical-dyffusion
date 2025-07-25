@@ -55,7 +55,7 @@ class TimeMeanAggregator(AbstractAggregator):
         self._n_batches += 1
 
     @torch.inference_mode()
-    def _get_logs(self, **kwargs) -> Tuple[Dict[str, float], Dict[str, float]]:
+    def _get_logs(self) -> Tuple[Dict[str, float], Dict[str, float]]:
         """
         Returns logs as can be reported to WandB.
         """
@@ -79,6 +79,14 @@ class TimeMeanAggregator(AbstractAggregator):
                         for i in range(gen.shape[0])
                     ]
                 )
+                logs[f"mse_member_avg/{name}"] = np.mean(
+                    [
+                        metrics.mean_squared_error(predicted=gen[i], truth=target, weights=area_weights)
+                        .cpu()
+                        .numpy()
+                        for i in range(gen.shape[0])
+                    ]
+                )
                 logs[f"bias_member_avg/{name}"] = np.mean(
                     [
                         metrics.time_and_global_mean_bias(predicted=gen[i], truth=target, weights=area_weights)
@@ -92,6 +100,12 @@ class TimeMeanAggregator(AbstractAggregator):
 
             logs[f"rmse/{name}"] = float(
                 metrics.root_mean_squared_error(predicted=gen_ens_mean, truth=target, weights=area_weights)
+                .cpu()
+                .numpy()
+            )
+
+            logs[f"mse/{name}"] = float(
+                metrics.mean_squared_error(predicted=gen_ens_mean, truth=target, weights=area_weights)
                 .cpu()
                 .numpy()
             )

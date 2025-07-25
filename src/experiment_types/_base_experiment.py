@@ -77,6 +77,7 @@ class BaseExperiment(LightningModule):
         model_config: DictConfig,
         datamodule_config: DictConfig,
         diffusion_config: Optional[DictConfig] = None,
+        loss_config: Optional[DictConfig] = None,
         optimizer: Optional[DictConfig] = None,
         scheduler: Optional[DictConfig] = None,
         monitor: Optional[str] = None,
@@ -114,6 +115,7 @@ class BaseExperiment(LightningModule):
         self.model_config = model_config
         self.datamodule_config = datamodule_config
         self.diffusion_config = diffusion_config
+        self.loss_config = loss_config
         self.num_predictions = num_predictions
         self.num_predictions_in_mem = num_predictions_in_memory or num_predictions
         assert self.num_predictions_in_mem <= num_predictions, "num_predictions_in_memory must be <= num_predictions"
@@ -271,6 +273,10 @@ class BaseExperiment(LightningModule):
         assert isinstance(in_channels, (int, dict)), f"Expected int, got {type(in_channels)} for in_channels."
         assert isinstance(out_channels, (int, dict)), f"Expected int, got {type(out_channels)} for out_channels."
         kwargs["datamodule_config"] = self.datamodule_config
+        loss_function = None
+        # if self.loss_config is not None:
+        #     loss_function = hydra.utils.instantiate(self.loss_config)
+        #     print(f"Instantiated loss function: {loss_function.__class__.__name__}")
         model = hydra.utils.instantiate(
             self.model_config,
             num_input_channels=in_channels,
@@ -279,6 +285,7 @@ class BaseExperiment(LightningModule):
             num_conditional_channels=cond_channels,
             spatial_shape_in=spatial_shape_in,
             spatial_shape_out=spatial_shape_out,
+            loss_function=self.loss_config,
             _recursive_=False,
             **kwargs,
             **self.extra_model_kwargs(),
@@ -536,6 +543,12 @@ class BaseExperiment(LightningModule):
             inputs_i = [split_batch(x, start_i, end_i) for x in inputs]
             kwargs_i = {k: split_batch(v, start_i, end_i) for k, v in kwargs.items()}
             results_i = self.predict_packed(*inputs_i, **kwargs_i)
+            if inputs_i[0].shape[0] == 0:
+                raise ValueError(
+                    f"Empty input tensor at index {i} with shape {inputs_i[0].shape}. "
+                    f"Check the input data and the batch size {actual_batch_size}."
+                    f"Or try setting num_prediction_loops to 1, current num_prediction_loops={self.num_prediction_loops}"
+                )
             # log.info(f"results_i: {results_i.keys()}, {results_i['preds'].shape}, inputs_i: {inputs_i[0].shape}")
             if predictions_mask is not None:
                 results_i = {k: v[..., predictions_mask[0, :]] for k, v in results_i.items()}

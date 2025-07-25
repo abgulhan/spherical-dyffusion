@@ -1,0 +1,12 @@
+# SOMA MSE + Magnitude-Weighted Direction Loss
+_target_: src.losses.soma_losses.make_soma_composite_loss
+base_loss_name: "mse"
+enable_direction_loss: true
+direction_weight: 0.15  # Slightly higher weight for magnitude-weighted
+direction_loss_config:
+  zonal_var: "timeDaily_avg_velocityZonal"          # Name of zonal velocity variable
+  meridional_var: "timeDaily_avg_velocityMeridional"     # Name of meridional velocity variable  
+  loss_type: "magnitude_weighted"
+denormalize_primary: false
+denormalize_direction: true  # Enable for magnitude-weighted
+# datamodule will be set automatically by experiment

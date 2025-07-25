@@ -8,7 +8,7 @@ spectral_transform: "sht"
 filter_type: "linear"
 operator_type: "dhconv"   # dhconv or diagonal
 num_layers: 8
-use_mlp: true
+use_mlp: false
 mlp_ratio: 2.0
 scale_factor: 1
 separable: false

@@ -28,7 +28,7 @@ def main(config: DictConfig) -> float:
 
 if __name__ == "__main__":
     if "WANDB_API_KEY" in os.environ:
-        if os.environ.get("WANDB_MODE") == "disabled" or os.environ.get("WANDB_DISABLED") == "true":
+        if str(os.environ.get("WANDB_MODE")).lower() in ["disabled", "offline"] or str(os.environ.get("WANDB_DISABLED")).lower() == "true":
             print("Weights & Biases logging is disabled.")
         else:
             print("Logging to Weights & Biases")

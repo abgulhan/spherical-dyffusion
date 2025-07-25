@@ -97,8 +97,12 @@ class InterpolationExperiment(BaseExperiment):
         if dynamical_cond is not None:
             assert "condition" not in batch, "condition should not be in batch if dynamical_condition is present"
         inputs = self.get_evaluation_inputs(dynamics, split=split)
+        predictions_mask = None
+        if "predictions_mask" in batch:
+            # dynamics is converted to tensordict by pytorch lightning, need to do the same here for predictions_mask
+            predictions_mask = self.pack_data(to_tensordict(batch["predictions_mask"]), input_or_output="output")
         for k, v in batch.items():
-            if k != "dynamics":
+            if k != "dynamics" and k != "predictions_mask":
                 extra_kwargs[k] = self.get_ensemble_inputs(v, split=split, add_noise=False)
 
         for t_step in self.horizon_range:
@@ -109,7 +113,9 @@ class InterpolationExperiment(BaseExperiment):
                 extra_kwargs["condition"] = self.get_ensemble_inputs(
                     self.get_dynamical_condition(dynamical_cond, target_time), split=split, add_noise=False
                 )
-            results = self.predict(inputs, time=time, **extra_kwargs)
+            results = self.predict(inputs, time=time, predictions_mask=None, **extra_kwargs) 
+            # Note: predictions_mask is not correctly used in this function call. 
+            # Furthermore, we only need to mask in the loss calculation, not in the prediction.
             preds = results["preds"]
 
             targets_tensor_t = main_data_raw[:, target_time, ...]
@@ -217,9 +223,9 @@ class InterpolationExperiment(BaseExperiment):
 
         return interpolated_tensors
 
-    def get_evaluation_inputs(self, dynamics: Tensor, split: str, **kwargs) -> Tensor:
+    def get_evaluation_inputs(self, dynamics: Tensor, split: str, add_noise=True, **kwargs) -> Tensor:
         inputs = self.get_inputs_from_dynamics(dynamics)
-        inputs = self.get_ensemble_inputs(inputs, split)
+        inputs = self.get_ensemble_inputs(inputs, split, add_noise=add_noise)
         return inputs
 
     # --------------------------------- Training
@@ -238,12 +244,18 @@ class InterpolationExperiment(BaseExperiment):
         targets = self.pack_data(targets, input_or_output="output")
         # We use timesteps  w-l+1, ..., w-1, w+h to predict timesteps w, ..., w+h-1
         # so t=0 corresponds to interpolating w, t=1 to w+1, ..., t=h-1 to w+h-1
+        
+        predictions_mask = None
+        if "predictions_mask" in batch:
+            predictions_mask = self.pack_data(to_tensordict(batch["predictions_mask"]), input_or_output="output")
+            
 
         loss = self.model.get_loss(
             inputs=inputs,
             targets=targets,
             condition=self.get_dynamical_condition(batch.pop("dynamical_condition", None), target_time=target_time),
             time=t,
-            **{k: v for k, v in batch.items() if k != "dynamics"},
+            predictions_mask=predictions_mask,
+            **{k: v for k, v in batch.items() if k != "dynamics" and k != "predictions_mask"},
         )  # function of BaseModel or BaseDiffusion classes
         return loss

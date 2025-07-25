@@ -1,0 +1,4 @@
+# SOMA denormalizing MSE loss
+_target_: src.losses.soma_losses.make_soma_loss
+base_loss_name: "mse"
+# datamodule will be set automatically by experiment

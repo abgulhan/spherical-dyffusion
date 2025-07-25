@@ -10,7 +10,7 @@ from omegaconf import DictConfig
 import xarray as xr
 import pandas as pd
 from scipy.spatial import cKDTree
-from src.ace_inference.core.prescriber import Prescriber
+#from src.ace_inference.core.prescriber import Prescriber
 from src.utilities.packer import Packer
 from src.evaluation.aggregators.main import OneStepAggregator
 from src.evaluation.aggregators.time_mean import TimeMeanAggregator
@@ -47,7 +47,8 @@ class SOMAh5Dataset(Dataset):
                  standardize: bool = True,
                  stats_path: Optional[str] = None,
                  window_step: int = 1,
-                 stack_z: bool = False):
+                 stack_z: bool = False,
+                 return_mask: bool = True):
         """
         Custom Dataset for HDF5 files with multiple runs.
         Args:
@@ -62,6 +63,10 @@ class SOMAh5Dataset(Dataset):
             window (int): Number of timesteps used as input (context). Total timesteps returned = window + horizon.
             standardize (bool): Whether to normalize data using precomputed statistics.
             stats_path (str, optional): Path to statistics file. If None, will look for default location.
+            window_step (int): Step size distance between window indices. Increase to decrease number of data points.
+            stack_z (bool): Whether to stack z-dimension for 2D interpolation.
+            return_mask (bool): Whether to return a mask for valid data points when __getitem__ is called. 
+                Masked regions will be set as `predictions_mask` in return dictionary. Note: in model.get_loss() this mask will be used in loss computation.
         """
         self.data_path = data_path
         self.run_keys = run_keys
@@ -88,6 +93,7 @@ class SOMAh5Dataset(Dataset):
         self.std = None
         self.mask = None
         self.stack_z = stack_z  # Whether to stack z-dimension for 2D interpolation
+        self.return_mask = return_mask  # Whether to return a mask for valid data points
         
         if self.standardize:
             self._load_stats(stats_path)
@@ -174,6 +180,7 @@ class SOMAh5Dataset(Dataset):
         """
         # Create mask for valid values (abs(value) < 1e30)
         valid_mask = np.abs(data) < 1e30
+        self.mask = valid_mask  # Store mask for later use
         
         # Apply standardization if enabled
         if self.standardize and self.mean is not None and self.std is not None:
@@ -375,21 +382,34 @@ class SOMAh5Dataset(Dataset):
         features_tensor = torch.from_numpy(data_cleaned_np).float()  # (horizon, Z, Y, X, P)
         # print(f"[SOMAh5Dataset] features_tensor (before permute) shape: {features_tensor.shape}")
         features_tensor = features_tensor.permute(0, 4, 1, 2, 3)  # (horizon, P, Z, Y, X)
-        # print(f"[SOMAh5Dataset] features_tensor (after permute) shape: {features_tensor.shape}")
+        predictions_mask = None
+        if self.return_mask:
+            # Select only the first item in the horizon dimension for the mask
+            predictions_mask = torch.from_numpy(self.mask).permute(0, 4, 1, 2, 3)  # (horizon, P, Z, Y, X)
+            predictions_mask = predictions_mask[0:1] # Select first time step only and squeeze singleton dims
+            #predictions_mask = predictions_mask  
+            # print(f"[SOMAh5Dataset] features_tensor (after permute) shape: {features_tensor.shape}")
         assert all(s > 0 for s in features_tensor.shape), f"Zero-length dimension in features_tensor: {features_tensor.shape} (idx={idx}, run_key={run_key})"
         param_dict = {}
+        predictions_mask_dict = {}
         if self.param_names is not None:
             for i, name in enumerate(self.param_names):
                 param_dict[name] = features_tensor[:, i, ...]  # (horizon, Z, Y, X)
+                if self.return_mask:
+                    predictions_mask_dict[name] = predictions_mask[:, i, ...].squeeze(0) # Now shape: (P, Z, Y, X)
         else:
             for i in range(features_tensor.shape[1]):
                 param_dict[f"channel_{i}"] = features_tensor[:, i, ...]
+                if self.return_mask:
+                    predictions_mask_dict[f"channel_{i}"] = predictions_mask[:, i, ...].squeeze(0)
         
         # If stack_z is True, average across z-axis (dim=2) and reduce to 2D grid
         if getattr(self, "stack_z", False):
             for k in param_dict:
                 # param_dict[k] shape: (horizon, Z, Y, X)
                 param_dict[k] = param_dict[k].mean(dim=1)  # Now shape: (horizon, Y, X)
+            if self.return_mask:
+                raise NotImplementedError("Masking not implemented for stacked z-dimension. Please implement if needed.")
 
         if self.transform:
             raise NotImplementedError("Transform function is not implemented in SOMAh5Dataset. Please implement it if needed.")
@@ -406,6 +426,10 @@ class SOMAh5Dataset(Dataset):
             data = {"dynamics": tensors, "dynamical_condition": forcings}
         else:
             data = {"dynamics": tensors}
+            
+        if self.return_mask:
+            # Add mask to the output dictionary
+            data['predictions_mask'] = predictions_mask_dict
         return data
 
 
@@ -453,7 +477,7 @@ class MyCustomDataModule(BaseDataModule): # Ensure it inherits from BaseDataModu
                  pin_memory: bool = True,
                  data_dir: Optional[str] = None, 
                  time_interval: int = 14, # time between each step,
-                 prescriber: Optional[Prescriber] = None,
+                 prescriber = None, #Optional[Prescriber] = None,
                  mesh_file_path: Optional[str] = None,  # Path to mesh file for area weights
                  use_mesh_area_weights: bool = False,  # Whether to load area weights from mesh file
                  standardize: bool = True,  # Whether to normalize data using precomputed statistics
@@ -477,6 +501,10 @@ class MyCustomDataModule(BaseDataModule): # Ensure it inherits from BaseDataModu
             stats_path: Path to precomputed statistics
             pin_memory: Whether to pin memory in data loaders
         """
+        print(f"[MyCustomDataModule] Initializing MyCustomDataModule!")
+        print(f"[MyCustomDataModule] Class name: {self.__class__.__name__}")
+        print(f"[MyCustomDataModule] Module: {self.__class__.__module__}")
+        
         # Extract parameters that are not accepted by parent class
         self.mesh_file_path = mesh_file_path
         self.use_mesh_area_weights = use_mesh_area_weights
@@ -678,6 +706,11 @@ class MyCustomDataModule(BaseDataModule): # Ensure it inherits from BaseDataModu
                     f"Train runs: {len(train_run_keys)}, "
                     f"Val runs: {len(val_run_keys)}, "
                     f"Test runs: {len(test_run_keys)}")
+        logger.info("="*20)
+        logger.info(f"Train run keys: {train_run_keys}")
+        logger.info(f"Validation run keys: {val_run_keys}")
+        logger.info(f"Test run keys: {test_run_keys}")
+        logger.info("="*20)
 
         dataset_common_args = {
             'data_path': self.hparams.data_path, 
@@ -893,6 +926,8 @@ class MyCustomDataModule(BaseDataModule): # Ensure it inherits from BaseDataModu
         verbose: bool = True,
     ) -> Dict[str, OneStepAggregator]:
         """Return the epoch aggregators for the given split."""
+        print(f"[get_epoch_aggregators] Called with split='{split}', experiment_type='{experiment_type}'")
+        
         # Calculate proper area weights for horizontal dimensions (Y, X)
         area_weights = self.calculate_area_weights(use_mesh_file=self.use_mesh_area_weights)
         if device is not None:
@@ -908,20 +943,19 @@ class MyCustomDataModule(BaseDataModule): # Ensure it inherits from BaseDataModu
             # For forecasting experiments
             horizon_range = range(1, self.hparams.horizon + 1)
         
-        # Create aggregators for each time step
+        # Make aggregators for each time step
         for h in horizon_range:
             aggregators[f"t{h}"] = OneStepAggregator(
                 use_snapshot_aggregator=False,  # Disable snapshots for now to save memory
-                record_normed=True,
-                record_abs_values=False,
+                record_normed=False, # disable area normalization since grid is uniform
+                record_abs_values=True,
                 verbose=verbose and (h == 1),
                 name=f"t{h}",
                 **aggr_kwargs,
             )
         
-        # Add time mean aggregator for full rollout evaluation
-        if split in ["test", "predict"] or ("interpolation" not in experiment_type.lower()):
-            aggregators["time_mean"] = SOMATimeMeanAggregator(**aggr_kwargs, name="time_mean")
+        # Always add time mean aggregator - provides valuable MSE metrics for all experiments and splits
+        aggregators["time_mean"] = SOMATimeMeanAggregator(**aggr_kwargs, name="time_mean")
         
         return aggregators
 
@@ -1032,13 +1066,28 @@ class SOMATimeMeanAggregator(TimeMeanAggregator):
     to return tensors that need dimension reduction.
     """
     
+    def __init__(self, **kwargs):
+        print("[SOMATimeMeanAggregator] Initializing SOMATimeMeanAggregator!")
+        super().__init__(**kwargs)
+    
+    @torch.inference_mode()
+    def _record_batch(self, target_data, gen_data):
+        print(f"[SOMATimeMeanAggregator] Recording batch, current n_batches: {self._n_batches}")
+        return super()._record_batch(target_data, gen_data)
+    
+    def get_logs(self, **kwargs):
+        print(f"[SOMATimeMeanAggregator] get_logs() called with {self._n_batches} batches recorded")
+        return super().get_logs(**kwargs)
+
     @torch.inference_mode()
     def _get_logs(self, **kwargs) -> Tuple[Dict[str, float], Dict[str, float]]:
         """
         Returns logs as can be reported to WandB.
         """
         if self._n_batches == 0:
-            raise ValueError("No data recorded.")
+            print(f"[SOMATimeMeanAggregator] No data recorded yet, returning empty logs")
+            return {}, {}
+        
         area_weights = self._area_weights
         logs = {}
         
@@ -1059,6 +1108,17 @@ class SOMATimeMeanAggregator(TimeMeanAggregator):
                         for i in range(gen.shape[0])
                     ]
                 )
+                logs[f"mse_member_avg/{name}"] = np.mean(
+                    [
+                        float(
+                            metrics.mean_squared_error(
+                                predicted=gen[i], truth=target, weights=area_weights,
+                                dim=(-2, -1)
+                            ).mean().cpu().numpy()
+                        )
+                        for i in range(gen.shape[0])
+                    ]
+                )
             else:
                 gen_ens_mean = gen
 
@@ -1068,6 +1128,12 @@ class SOMATimeMeanAggregator(TimeMeanAggregator):
                     predicted=gen_ens_mean, truth=target, weights=area_weights,
                     dim=(-2, -1)  # Reduce over spatial dimensions
                 ).mean().cpu().numpy()  # Take mean over any remaining dimensions
+            )
+            logs[f"mse/{name}"] = float(
+                metrics.mean_squared_error(
+                    predicted=gen_ens_mean, truth=target, weights=area_weights,
+                    dim=(-2, -1)
+                ).mean().cpu().numpy()
             )
 
             logs[f"bias/{name}"] = float(
@@ -1083,6 +1149,12 @@ class SOMATimeMeanAggregator(TimeMeanAggregator):
                     dim=(-2, -1)  # Reduce over spatial dimensions
                 ).mean().cpu().numpy()  # Take mean over any remaining dimensions
             )
+        
+        # # Debug print to verify MSE is in logs
+        # print(f"[SOMATimeMeanAggregator] Generated logs keys: {list(logs.keys())}")
+        # mse_keys = [k for k in logs.keys() if 'mse' in k]
+        # print(f"[SOMATimeMeanAggregator] MSE keys found: {mse_keys}")
+        
         return logs, {}
 
 # Example usage (for testing the datamodule directly, not part of the library)

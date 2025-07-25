@@ -1,0 +1,16 @@
+# Main experiment config with default loss
+defaults:
+  - model: fno3d_interpolation
+  - loss: mse  # Default to basic MSE loss
+  - _self_
+
+# Your other experiment settings...
+experiment_name: "interpolation_experiment"
+seed: 42
+
+# This way if someone runs:
+# python train.py
+# They get MSE loss by default
+
+# But they can override with:
+# python train.py loss=soma_angular

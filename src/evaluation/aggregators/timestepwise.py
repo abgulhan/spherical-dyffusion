@@ -38,7 +38,7 @@ class MeanAggregator:
         area_weights: torch.Tensor,
         is_ensemble: bool,
         record_normed: bool = False,
-        record_rmse: bool = True,
+        record_rmse: bool = False,
         record_abs_values: bool = False,
     ):
         self._area_weights = area_weights
@@ -71,7 +71,7 @@ class MeanAggregator:
             else:
                 area_weights = None
 
-            metric_names = ["l1", "rmse", "bias", "grad_mag_percent_diff"]
+            metric_names = ["l1", "rmse", "bias", "grad_mag_percent_diff", "mse"]
             if self.is_ensemble:
                 metric_names += ["ssr", "crps"]
             if self.record_normed:

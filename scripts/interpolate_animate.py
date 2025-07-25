@@ -131,6 +131,7 @@ def main_interpolated_animation(
     #batch_idx: int = 0,
     #sample_idx: int = 0,
     #forward_idx = int = 0,
+    real_frame_step: int = 1, # size between real fr
 ):
     """
     Main function for creating interpolated ocean current animations with proper speed matching.
@@ -160,6 +161,7 @@ def main_interpolated_animation(
         device (str): Device to use for model inference ("auto", "cpu", "cuda")
         batch_idx (int): Which batch to use from the dataset
         sample_idx (int): Which sample within the batch to use
+        real_frame_step (int): Step size for real frames (1 = use all, 2 = every other, etc.)
         
     Returns:
         str: Path to the saved animation file
@@ -192,8 +194,8 @@ def main_interpolated_animation(
     
 
     # Validate tat num_interpolated_frames is a divisor of model horizon
-    if num_interpolated_frames > 0 and model_horizon % num_interpolated_frames != 0:
-        raise ValueError(f"num_interpolated_frames ({num_interpolated_frames}) must be a divisor of model horizon ({model_horizon})")
+    if num_interpolated_frames > 0 and (model_horizon-1) % num_interpolated_frames != 0:
+        raise ValueError(f"num_interpolated_frames ({num_interpolated_frames}) must be a divisor of model horizon-1 ({model_horizon-1})")
 
     
     # Set up prediction datamodule to fetch timestep pairs
@@ -221,6 +223,7 @@ def main_interpolated_animation(
     
     model._datamodule = datamodule  # Set the datamodule in the model for access
     model.num_predictions = 1  # Set number of predictions to 1 for single timestep pairs
+    model.num_prediction_loops = 1  # Set to 1 for single prediction loop
     model.eval()  # Ensure model is in evaluation mode
     
     # The dataset now provides timestep pairs (window=1 + horizon=1 = 2 consecutive timesteps)
@@ -316,20 +319,16 @@ def main_interpolated_animation(
         # Fetch the timestep pair from datamodule
 
         dataset.standardize = False
-        start_real = dataset[data_key, real_idx]['dynamics']  # Shape: (1, channels, z, y, x)
-        end_real = dataset[data_key, real_idx+1]['dynamics']
+        start_real = dataset[data_key, (real_idx)*real_frame_step]['dynamics']  # Shape: (1, channels, z, y, x)
+        end_real = dataset[data_key, (real_idx+1)*real_frame_step]['dynamics']
         dataset.standardize = True
-        start_real_norm = dataset[data_key, real_idx]['dynamics']  # Shape: (1, channels, z, y, x)
-        end_real_norm = dataset[data_key, real_idx+1]['dynamics']
-        
-        # Set all values of 'var_x' in end_real_norm to 0.5
+        start_real_norm = dataset[data_key, (real_idx)*real_frame_step]['dynamics']  # Shape: (1, channels, z, y, x)
+        end_real_norm = dataset[data_key, (real_idx+1)*real_frame_step]['dynamics']
 
-        end_real_norm['var_x'] = torch.full_like(end_real_norm['var_x'], 0.0)
-        start_real_norm['var_x'] = torch.full_like(start_real_norm['var_x'], 0.0)
 
         if len(frames_to_animate) == 0:
             frames_to_animate.append(start_real)
-            frames_to_animate.append(dataset.inverse_transform(start_real_norm)) # debugging
+            #frames_to_animate.append(dataset.inverse_transform(start_real_norm)) # debugging
             
             print(f"  Stored real frame {real_idx} at animation index {len(frames_to_animate)}")
         
@@ -387,7 +386,7 @@ def main_interpolated_animation(
         
         # add the real frame
         frames_to_animate.append(end_real)
-        frames_to_animate.append(dataset.inverse_transform(end_real_norm)) # debugging
+        #frames_to_animate.append(dataset.inverse_transform(end_real_norm)) # debugging
 
         print(f"  Stored real frame {real_idx+1} at animation index {len(frames_to_animate)}")
 
@@ -620,7 +619,7 @@ def main_interpolated_animation(
     os.makedirs(output_dir, exist_ok=True)
     
     # Save animation with descriptive filename
-    output_filename = (f"{data_key}_{total_original_frames}real_{num_interpolated_frames}interp_"
+    output_filename = (f"{data_key}_{total_original_frames}real_{num_interpolated_frames}_step{real_frame_step}_interp_"
                       f"{cmap}_gamma{colorbar_gamma}_mid{midpoint}_fps{original_fps:.1f}.gif")
     output_path = os.path.join(output_dir, output_filename)
     
@@ -628,8 +627,9 @@ def main_interpolated_animation(
     ani.save(output_path,
              writer='ffmpeg',
              fps=animation_fps,
-             dpi=150,
-             bitrate=600) #1800
+             dpi=50,
+             bitrate=100,
+             extra_args=['-preset', 'ultrafast']) #1800
     plt.close(fig)
     
     print(f"✅ Animation saved successfully!")
@@ -816,7 +816,8 @@ def extract_velocity_from_timestep_pair(timestep_sample, timestep_idx=0, layer_s
 
 if __name__ == '__main__':
     
-    checkpoint_path = '/global/homes/a/abgulhan/WORKING/git_repos/spherical-dyffusion/results/checkpoints/40587104/SOMA-Ipol24h_None_epoch037_seed3.ckpt'#'/global/homes/a/abgulhan/WORKING/checkpoints/SOMA-Ipol24h_None_epoch005_seed4.ckpt'#'/global/homes/a/abgulhan/WORKING/checkpoints/SOMA-Ipol24h_None_epoch044_seed4.ckpt'  
+    checkpoint_path ='/global/homes/a/abgulhan/WORKING/git_repos/spherical-dyffusion/results/checkpoints/40991542/last.ckpt'#'/global/homes/a/abgulhan/WORKING/git_repos/spherical-dyffusion/results/checkpoints/40740386/SOMA-Ipol6h_None_epoch059_seed2.ckpt'#'/global/homes/a/abgulhan/WORKING/git_repos/spherical-dyffusion/results/checkpoints/40587104/SOMA-Ipol24h_None_epoch037_seed3.ckpt'#'/global/homes/a/abgulhan/WORKING/checkpoints/SOMA-Ipol24h_None_epoch005_seed4.ckpt'#'/global/homes/a/abgulhan/WORKING/checkpoints/SOMA-Ipol24h_None_epoch044_seed4.ckpt'  
+    # '/global/homes/a/abgulhan/WORKING/git_repos/spherical-dyffusion/results/checkpoints/40758290/last.ckpt'
     #'/global/homes/a/abgulhan/WORKING/git_repos/spherical-dyffusion/results/checkpoints/40587104/SOMA-Ipol24h_None_epoch037_seed3.ckpt'#
     data_path = '/global/homes/a/abgulhan/WORKING/ml_converted/data-gm-year7-22-biweekly.hdf5'
     
@@ -824,15 +825,68 @@ if __name__ == '__main__':
         checkpoint_path=checkpoint_path,
         data_path=data_path,
         data_key='forward_1',
-        total_original_frames=3,  # Reduced for debugging
+        total_original_frames=5,  # Reduced for debugging
         original_fps=0.9,
-        num_interpolated_frames=3,
+        num_interpolated_frames=5,
         output_dir='figures/test_horizon',
         midpoint=0.0,
         colorbar_gamma=1.0,
         cmap='rainbow',
         device='auto',
         layer_start=0,
-        layer_end=10
+        layer_end=10,
+        real_frame_step=6,
     )
+
+    output = main_interpolated_animation(
+        checkpoint_path=checkpoint_path,
+        data_path=data_path,
+        data_key='forward_2',
+        total_original_frames=5,  # Reduced for debugging
+        original_fps=0.9,
+        num_interpolated_frames=5,
+        output_dir='figures/test_horizon',
+        midpoint=0.0,
+        colorbar_gamma=1.0,
+        cmap='rainbow',
+        device='auto',
+        layer_start=0,
+        layer_end=10,
+        real_frame_step=6,
+    )
+    
+    output = main_interpolated_animation(
+        checkpoint_path=checkpoint_path,
+        data_path=data_path,
+        data_key='forward_3',
+        total_original_frames=5,  # Reduced for debugging
+        original_fps=0.9,
+        num_interpolated_frames=5,
+        output_dir='figures/test_horizon',
+        midpoint=0.0,
+        colorbar_gamma=1.0,
+        cmap='rainbow',
+        device='auto',
+        layer_start=0,
+        layer_end=10,
+        real_frame_step=6,
+    )
+    
+    # output = main_interpolated_animation(
+    #     checkpoint_path=checkpoint_path,
+    #     data_path=data_path,
+    #     data_key='forward_2',
+    #     total_original_frames=25,  # Reduced for debugging
+    #     original_fps=0.9*5,
+    #     num_interpolated_frames=0,
+    #     output_dir='figures/test_horizon',
+    #     midpoint=0.0,
+    #     colorbar_gamma=1.0,
+    #     cmap='rainbow',
+    #     device='auto',
+    #     layer_start=0,
+    #     layer_end=10,
+    #     real_frame_step=1,
+    # )
+    
 

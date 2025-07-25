@@ -1,0 +1,15 @@
+# SOMA MSE + Angular Direction Loss
+loss_function:
+  _target_: src.losses.soma_losses.SOMACompositeLoss
+  primary_loss:
+    _target_: torch.nn.MSELoss
+    reduction: mean
+  direction_loss:
+    _target_: src.losses.soma_losses.DirectionLoss
+    zonal_var: "timeDaily_avg_velocityZonal"
+    meridional_var: "timeDaily_avg_velocityMeridional"
+    loss_type: "angular"
+    eps: 1e-8
+  direction_weight: 0.1
+  denormalize_primary: false
+  denormalize_direction: false

@@ -15,6 +15,7 @@ from src.models._base_model import BaseModel
 from src.models.modules.misc import get_time_embedder
 
 
+
 class FNO3DBlock(nn.Module):
     """
     Custom FNO3D block with time embedding support, similar to SFNO blocks.
@@ -30,6 +31,8 @@ class FNO3DBlock(nn.Module):
         time_scale_shift_before_filter: bool = True,
         use_mlp: bool = False,
         mlp_ratio: float = 2.0,
+        num_layers: int = 12,
+        padding: int = 8,
     ):
         super().__init__()
         self.embed_dim = embed_dim
@@ -59,8 +62,23 @@ class FNO3DBlock(nn.Module):
         else:
             self.time_mlp = None
         
-        # FNO core (we'll create a simplified version for time conditioning)
-        self.spectral_conv = nn.Conv3d(embed_dim, embed_dim, kernel_size=1)
+        # FNO spectral convolution core
+        # self.spectral_conv = SpectralConv3d(
+        #     in_channels=embed_dim,
+        #     out_channels=embed_dim,
+        #     modes1=num_fno_modes,
+        #     modes2=num_fno_modes,
+        #     modes3=num_fno_modes,
+        # )
+        self.fno_encoder = FNO3DEncoder(
+            in_channels=embed_dim,
+            num_fno_layers=1,  # Single layer for this block, use multiple blocks for multiple layers
+            fno_layer_size=embed_dim,
+            num_fno_modes=num_fno_modes,
+            padding=padding, # TODO calculate padding based on inputs
+            activation_fn=nn.GELU(),
+            coord_features=True,
+        )
         
         # Optional MLP
         if use_mlp:
@@ -79,11 +97,16 @@ class FNO3DBlock(nn.Module):
     
     def time_scale_shift(self, x, time_emb):
         """Apply time-based scale and shift transformation."""
+        #print(f"==> time_emb_input {time_emb}")
         assert time_emb is not None, "time_emb is None but time_scale_shift is called"
         time_emb = self.time_mlp(time_emb)
         time_emb = rearrange(time_emb, "b c -> b c 1 1 1")  # Add spatial dimensions for 3D
         scale, shift = time_emb.chunk(2, dim=1)  # split into scale and shift (channel dim)
         x = x * (scale + 1) + shift
+        # print(f"Applied time scale/shift: scale shape {scale.shape}, shift shape {shift.shape}")  # Debug log
+        # print(f"===> time_emb: {list(time_emb.squeeze().tolist())}")  # Debug log
+        # print(f"===> scale: {list(scale.squeeze().tolist())}")  # Debug log
+        # print(f"===> shift: {list(shift.squeeze().tolist())}")  # Debug log
         return x
     
     def forward(self, x, time_emb=None):
@@ -95,7 +118,8 @@ class FNO3DBlock(nn.Module):
             x_norm = self.time_scale_shift(x_norm, time_emb)
         
         # Spectral convolution (simplified FNO operation)
-        x_filtered = self.spectral_conv(x_norm)
+        with amp.autocast(device_type='cuda', enabled=False):  # Disable autocast for FNO core
+            x_filtered = self.fno_encoder(x_norm)
         
         # Residual connection
         x = x + x_filtered
@@ -204,6 +228,7 @@ class FourierNeuralOperatorNet3D(BaseModel):
         # Time embedding (similar to SFNO implementation)
         self.time_dim = None
         if with_time_emb:
+            self.log_text.info("Using time embedding with FNO3D")
             pos_emb_dim = self.embed_dim
             sinusoidal_embedding = "true"
             self.time_dim = self.embed_dim * time_dim_mult
@@ -244,6 +269,7 @@ class FourierNeuralOperatorNet3D(BaseModel):
                 time_scale_shift_before_filter=time_scale_shift_before_filter,
                 use_mlp=use_mlp,
                 mlp_ratio=mlp_ratio,
+                padding=padding,
             )
             self.blocks.append(block)
 
@@ -274,14 +300,14 @@ class FourierNeuralOperatorNet3D(BaseModel):
         if self.time_rescale:
             self.time_scaler = 1000.0 / (max_time - min_time)
             self.time_shift = -min_time
-            if hasattr(self, 'log_text'):
-                self.log_text.info(
-                    f"Time rescaling: min_time: {min_time}, max_time: {max_time}, "
-                    f"time_scaler: {self.time_scaler}, time_shift: {self.time_shift}"
-                )
+            # if hasattr(self, 'log_text'):
+            self.log_text.info(
+                f"Time rescaling: min_time: {min_time}, max_time: {max_time}, "
+                f"time_scaler: {self.time_scaler}, time_shift: {self.time_shift}"
+            )
         else:
-            if hasattr(self, 'log_text'):
-                self.log_text.info(f"Time stats will be checked: min_time: {min_time}, max_time: {max_time}")
+            # if hasattr(self, 'log_text'):
+            self.log_text.info(f"Time stats will be checked: min_time: {min_time}, max_time: {max_time}")
 
     def forward_features(self, x, time=None):
         """Forward pass through FNO blocks with optional time conditioning."""
@@ -293,7 +319,8 @@ class FourierNeuralOperatorNet3D(BaseModel):
                 time <= self.max_time
             ).all(), f"time must be in [{self.min_time}, {self.max_time}], but time is {time}"
             if self.time_rescale:
-                time = time * self.time_scaler + self.time_shift
+                #time = time * self.time_scaler + self.time_shift
+                time = (time + self.time_shift) * self.time_scaler
             t_repr = self.time_emb_mlp(time)
         else:
             t_repr = None

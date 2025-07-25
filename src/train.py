@@ -14,6 +14,8 @@ from src.utilities.utils import AlreadyLoggedError, divein, get_logger, melk
 from src.utilities.wandb_api import get_run_api
 from src.utilities.wandb_callbacks import MyWandbLogger
 
+from lightning.pytorch.plugins.environments import SLURMEnvironment
+
 
 log = get_logger(__name__)
 
@@ -125,6 +127,11 @@ def run_model(config: DictConfig) -> float:
                 removed_value = config.trainer.pop(param)
                 log.info(f"Removed deprecated trainer parameter '{param}' with value '{removed_value}' from config")
     
+    # slurm_plugin = SLURMEnvironment(requeue_signal='SIGUSR1')
+    # trainer_plugins = config.trainer.get('plugins', [])
+    # if all(not isinstance(p, SLURMEnvironment) for p in trainer_plugins):
+    #     trainer_plugins.append(slurm_plugin)
+    #     config.trainer['plugins'] = trainer_plugins
     # Init Lightning trainer
     trainer: pl.Trainer = hydra.utils.instantiate(config.trainer, callbacks=callbacks, logger=loggers)
 

@@ -92,12 +92,12 @@ class BaseModel(LightningModule):
             # Check if SOMA loss is being used
             is_soma_loss = hasattr(criterion, '__class__') and 'SOMADenormalizingLoss' in str(type(criterion))
             
-            if is_soma_loss:
-                self.log_text.info("🔥" * 20)
-                self.log_text.info("🔥 USING SOMA DENORMALIZING LOSS! 🔥")
-                self.log_text.info("🔥" * 20)
-            else:
-                self.log_text.info("ℹ️  Using standard loss function (not SOMA)")
+            # if is_soma_loss:
+            #     self.log_text.info("🔥" * 20)
+            #     self.log_text.info("🔥 USING SOMA DENORMALIZING LOSS! 🔥")
+            #     self.log_text.info("🔥" * 20)
+            # else:
+            #     self.log_text.info("ℹ️  Using standard loss function (not SOMA)")
                 
             print_text = (
                 f"Criterion: {criterion} with weights: {self.loss_function_weights}"
@@ -250,7 +250,11 @@ class BaseModel(LightningModule):
             ), f"Be careful: Predictions shape {predictions.shape} != targets shape {targets.shape}. Missing singleton dimensions after batch dim. can be fatal."
             loss = self.criterion["preds"](predictions, targets)
             assert len(self.loss_function_weights) == 0, "Loss function weights are not supported for this case"
-            loss_dict = dict(loss=loss)
+            if type(loss) is dict:
+                assert 'loss' in loss, "Loss dict must contain 'loss' key"
+                loss_dict = loss
+            else:    
+                loss_dict = dict(loss=loss)
         else:
             if predictions_post_process is not None:
                 # Do post-processing of the predictions (but not other outputs of the model)

@@ -3,9 +3,9 @@ defaults:
   - _self_
 
 _target_: src.models.fno_time.fnonet3d.FourierNeuralOperatorNet3D
-embed_dim: 32 #256 32->64 3x mem increase
-num_layers: 4 #8 2->4 50% mem increase
-num_fno_modes: 8 # 8->12 2.5x mem increase, 8->10 ~2x mem increase
+embed_dim: 64
+num_layers: 4
+num_fno_modes: 16
 padding: 8
 padding_type: "constant"
 activation_function: "gelu"
@@ -14,8 +14,13 @@ dropout: 0.0
 big_skip: true
 use_mlp: false
 mlp_ratio: 2.0
-pos_embed: true
-time_embed: true
-time_rescale: true  # Rescale time embeddings
+pos_embed: false
 in_chans: 12 #(window + 1) * channels, with window=1: (1+1)*6=12
 # out_chans will be set dynamically
+
+# Use SOMA denormalizing loss for physically meaningful training
+loss_function:
+  _target_: src.losses.soma_losses.SOMADenormalizingLoss
+  base_loss_fn:
+    _target_: torch.nn.MSELoss
+    reduction: mean

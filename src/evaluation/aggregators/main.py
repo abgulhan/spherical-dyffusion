@@ -71,7 +71,7 @@ class OneStepAggregator(AbstractAggregator):
         self,
         use_snapshot_aggregator: bool = True,
         record_normed: bool = False,
-        record_rmse: bool = True,
+        record_rmse: bool = False,
         record_abs_values: bool = False,  # logs absolutes mean and std of preds and targets
         snapshot_var_names: list[str] = None,
         every_nth_epoch_snapshot: int = 8,

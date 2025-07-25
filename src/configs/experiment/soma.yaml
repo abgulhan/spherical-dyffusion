@@ -14,7 +14,8 @@ module:
   use_ema: True
   ema_decay: 0.9999
   monitor: "val/avg/crps" # if using module.num_predictions > 1, automatically changes to "val/avg/crps"
-  num_predictions: 2 # Ensemble size. Effective evaluation batch size is datamodule.eval_batch_size * module.num_predictions
+  num_predictions: 10 # Ensemble size. Effective evaluation batch size is datamodule.eval_batch_size * module.num_predictions
+  num_predictions_in_memory: 1  # Number of predictions to keep in memory for evaluation
   optimizer:
     name: adamw  # or set to "adamw" if not using apex.FusedAdam
     lr: 1e-4  # Reduced learning rate for stability

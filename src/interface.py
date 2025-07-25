@@ -53,6 +53,7 @@ def get_lightning_module(config: DictConfig, **kwargs) -> BaseExperiment:
         model_config=config.model,
         datamodule_config=config.datamodule,
         diffusion_config=config.get("diffusion", default_value=None),
+        loss_config=config.get("loss", default_value=None),
         _recursive_=False,
         **kwargs,
     )
